@@ -25,9 +25,11 @@
 #include <vector>
 #include <cctype>
 #include <cassert>
+#include <cstring>
 #include <sstream>
 #include <iostream>
 #include <optional>
+#include <functional>
 #include <string_view>
 #include <type_traits>
 
@@ -35,7 +37,7 @@
 
 class StringRef : public std::string_view {
 
-    static unsigned GetAutoSenseRadix(StringRef &Str) {
+    static unsigned GetAutoSenseRadix(StringRef& Str) {
         if (Str.empty())
             return 10;
 
@@ -63,7 +65,7 @@ class StringRef : public std::string_view {
     }
 
     bool getAsUnsignedInteger(StringRef Str, unsigned Radix,
-                              unsigned long long &Result) const {
+        unsigned long long& Result) const {
         if (consumeUnsignedInteger(Str, Radix, Result))
             return true;
 
@@ -73,7 +75,7 @@ class StringRef : public std::string_view {
     }
 
     bool getAsSignedInteger(StringRef Str, unsigned Radix,
-                            long long &Result) const {
+        long long& Result) const {
         if (consumeSignedInteger(Str, Radix, Result))
             return true;
 
@@ -82,8 +84,8 @@ class StringRef : public std::string_view {
         return !Str.empty();
     }
 
-    bool consumeUnsignedInteger(StringRef &Str, unsigned Radix,
-                                unsigned long long &Result) const {
+    bool consumeUnsignedInteger(StringRef& Str, unsigned Radix,
+        unsigned long long& Result) const {
         // Autosense radix if not specified.
         if (Radix == 0)
             Radix = GetAutoSenseRadix(Str);
@@ -131,8 +133,8 @@ class StringRef : public std::string_view {
         Str = Str2;
         return false;
     }
-    bool consumeSignedInteger(StringRef &Str, unsigned Radix,
-                              long long &Result) const {
+    bool consumeSignedInteger(StringRef& Str, unsigned Radix,
+        long long& Result) const {
         unsigned long long ULLVal;
 
         // Handle positive strings first.
@@ -160,14 +162,14 @@ class StringRef : public std::string_view {
         return false;
     }
 
-  public:
+public:
     StringRef() : std::string_view() {}
-    StringRef(const StringRef &) = default;
-    StringRef &operator=(const StringRef &) = default;
+    StringRef(const StringRef&) = default;
+    StringRef& operator=(const StringRef&) = default;
 
-    StringRef(const char *str, size_t len) : std::string_view(str, len) {}
+    StringRef(const char* str, size_t len) : std::string_view(str, len) {}
 
-    StringRef(const char *str) : std::string_view(str) {}
+    StringRef(const char* str) : std::string_view(str) {}
 
 #if __cplusplus <= 201703L
     bool starts_with(StringRef str) const {
@@ -178,33 +180,35 @@ class StringRef : public std::string_view {
         return !empty() && std::char_traits<char>::eq(front(), c);
     }
 
-    bool starts_with(const char *str) const {
+    bool starts_with(const char* str) const {
         return starts_with(StringRef(str));
     }
 
     bool ends_with(StringRef str) const {
         return size() >= str.size() &&
-               compare(size() - str.size(), npos, str) == 0;
+            compare(size() - str.size(), npos, str) == 0;
     }
 
     bool ends_with(char c) const {
         return !empty() && std::char_traits<char>::eq(back(), c);
     }
 
-    bool ends_with(const char *str) const {
+    bool ends_with(const char* str) const {
         return ends_with(StringRef(str));
     }
 #endif
-
+#ifdef _MSC_VER
+#define strncasecmp _strnicmp
+#endif
     bool startswith_lower(StringRef Prefix) const {
         return size() >= Prefix.size() &&
-               strncasecmp(data(), Prefix.data(), Prefix.size()) == 0;
+            strncasecmp(data(), Prefix.data(), Prefix.size()) == 0;
     }
 
     bool endswith_lower(StringRef Suffix) const {
         return size() >= Suffix.size() &&
-               strncasecmp(end() - Suffix.size(), Suffix.data(),
-                           Suffix.size()) == 0;
+            strncasecmp(data() + size() - Suffix.size(), Suffix.data(),
+                Suffix.size()) == 0;
     }
 
     StringRef substr(size_t Start, size_t N = npos) const {
@@ -259,7 +263,7 @@ class StringRef : public std::string_view {
     /// erroneous if empty or if it overflows T.
     template <typename T>
     typename std::enable_if<std::numeric_limits<T>::is_signed, bool>::type
-    getAsInteger(unsigned Radix, T &Result) const {
+        getAsInteger(unsigned Radix, T& Result) const {
         long long LLVal;
         if (getAsSignedInteger(*this, Radix, LLVal) ||
             static_cast<T>(LLVal) != LLVal)
@@ -270,7 +274,7 @@ class StringRef : public std::string_view {
 
     template <typename T>
     typename std::enable_if<!std::numeric_limits<T>::is_signed, bool>::type
-    getAsInteger(unsigned Radix, T &Result) const {
+        getAsInteger(unsigned Radix, T& Result) const {
         unsigned long long ULLVal;
         // The additional cast to unsigned long long is required to avoid the
         // Visual C++ warning C4805: '!=' : unsafe mix of type 'bool' and type
@@ -293,7 +297,7 @@ class StringRef : public std::string_view {
     /// is removed from the beginning of the string.
     template <typename T>
     typename std::enable_if<std::numeric_limits<T>::is_signed, bool>::type
-    consumeInteger(unsigned Radix, T &Result) {
+        consumeInteger(unsigned Radix, T& Result) {
         long long LLVal;
         if (consumeSignedInteger(*this, Radix, LLVal) ||
             static_cast<long long>(static_cast<T>(LLVal)) != LLVal)
@@ -304,7 +308,7 @@ class StringRef : public std::string_view {
 
     template <typename T>
     typename std::enable_if<!std::numeric_limits<T>::is_signed, bool>::type
-    consumeInteger(unsigned Radix, T &Result) {
+        consumeInteger(unsigned Radix, T& Result) {
         unsigned long long ULLVal;
         if (consumeUnsignedInteger(*this, Radix, ULLVal) ||
             static_cast<unsigned long long>(static_cast<T>(ULLVal)) != ULLVal)
@@ -335,7 +339,7 @@ class StringRef : public std::string_view {
     /// the right removed.
     StringRef rtrim(StringRef Chars = " \t\n\v\f\r") const {
         return drop_back(size() -
-                         std::min(size(), find_last_not_of(Chars) + 1));
+            std::min(size(), find_last_not_of(Chars) + 1));
     }
 
     /// Return string with consecutive \p Char characters starting from the
@@ -387,7 +391,7 @@ template <typename T, std::size_t SizeOfT> struct LeadingZerosCounter {
         // Bisection method.
         std::size_t ZeroBits = 0;
         for (T Shift = std::numeric_limits<T>::digits >> 1; Shift;
-             Shift >>= 1) {
+            Shift >>= 1) {
             T Tmp = Val >> Shift;
             if (Tmp)
                 Val = Tmp;
@@ -434,8 +438,8 @@ template <typename T> struct LeadingZerosCounter<T, 8> {
 
 template <typename T> std::size_t countLeadingZeros(T Val) {
     static_assert(std::numeric_limits<T>::is_integer &&
-                      !std::numeric_limits<T>::is_signed,
-                  "Only unsigned integral types are allowed.");
+        !std::numeric_limits<T>::is_signed,
+        "Only unsigned integral types are allowed.");
     return LeadingZerosCounter<T, sizeof(T)>::count(Val);
 }
 
@@ -473,11 +477,11 @@ struct build_index_impl<0, I...> : index_sequence<I...> {};
 
 namespace detail {
 
-template <typename F, typename Tuple, std::size_t... I>
-auto apply_tuple_impl(F &&f, Tuple &&t, index_sequence<I...>)
-    -> decltype(std::forward<F>(f)(std::get<I>(std::forward<Tuple>(t))...)) {
-    return std::forward<F>(f)(std::get<I>(std::forward<Tuple>(t))...);
-}
+    template <typename F, typename Tuple, std::size_t... I>
+    auto apply_tuple_impl(F&& f, Tuple&& t, index_sequence<I...>)
+        -> decltype(std::forward<F>(f)(std::get<I>(std::forward<Tuple>(t))...)) {
+        return std::forward<F>(f)(std::get<I>(std::forward<Tuple>(t))...);
+    }
 
 } // end namespace detail
 
@@ -485,147 +489,148 @@ auto apply_tuple_impl(F &&f, Tuple &&t, index_sequence<I...>)
 /// tuple variadically to f as if by calling f(a1, a2, ..., an) and
 /// return the result.
 template <typename F, typename Tuple>
-auto apply_tuple(F &&f, Tuple &&t) -> decltype(detail::apply_tuple_impl(
+auto apply_tuple(F&& f, Tuple&& t) -> decltype(detail::apply_tuple_impl(
     std::forward<F>(f), std::forward<Tuple>(t),
     build_index_impl<
-        std::tuple_size<typename std::decay<Tuple>::type>::value>{})) {
+    std::tuple_size<typename std::decay<Tuple>::type>::value>{})) {
     using Indices = build_index_impl<
         std::tuple_size<typename std::decay<Tuple>::type>::value>;
 
     return detail::apply_tuple_impl(std::forward<F>(f), std::forward<Tuple>(t),
-                                    Indices{});
+        Indices{});
 }
+
+template <typename T, T> struct SameType;
 
 //==-----------Formart Variadic Details------------==//
 
 template <typename T, typename Enable = void> struct format_provider {};
 
 namespace detail {
-class format_adapter {
-  protected:
-    virtual ~format_adapter() {}
+    class format_adapter {
+    protected:
+        virtual ~format_adapter() {}
 
-  public:
-    virtual void format(std::ostream &os, StringRef options) = 0;
-};
+    public:
+        virtual void format(std::ostream& os, StringRef options) = 0;
+    };
 
-template <typename T> class provider_format_adapter : public format_adapter {
-    T item;
+    template <typename T> class provider_format_adapter : public format_adapter {
+        T item;
 
-  public:
-    explicit provider_format_adapter(T &&item) : item(std::forward<T>(item)) {}
-    void format(std::ostream &os, StringRef options) override {
-        format_provider<std::decay_t<T>>::format(item, os, options);
+    public:
+        explicit provider_format_adapter(T&& item) : item(std::forward<T>(item)) {}
+        void format(std::ostream& os, StringRef options) override {
+            format_provider<std::decay_t<T>>::format(item, os, options);
+        }
+    };
+
+    template <typename T>
+    class stream_operator_format_adapter : public format_adapter {
+        T item;
+
+    public:
+        explicit stream_operator_format_adapter(T&& item)
+            : item(std::forward<T>(item)) {}
+        void format(std::ostream& os, StringRef options) override {
+            os << item;
+        }
+    };
+
+    template <typename T> class missing_format_adapter;
+
+    template <typename T> struct has_format_provider {
+        using Decayed = std::decay_t<T>;
+        using SignatureFormat = void (*)(const Decayed&, std::ostream& os,
+            StringRef);
+
+        template <typename U>
+        static char test(SameType<SignatureFormat, &U::format> *);
+
+        template <typename U> static double test(...);
+
+        static const bool value = (sizeof(test<Decayed>(nullptr)) == 1);
+    };
+
+    template <typename T> struct has_ostream_operator {
+        using ConstRef = const std::decay_t<T>&;
+
+        template <typename U>
+        static char test(
+            std::enable_if_t<std::is_same_v<decltype(std::declval<std::ostream&>()
+                << std::declval<U>()),
+            std::ostream&>,
+            int*>);
+
+        template <typename U> static double test(...);
+
+        static const bool value = (sizeof(test<ConstRef>(nullptr)) == 1);
+    };
+
+    template <typename T>
+    struct uses_format_member
+        : public std::integral_constant<
+        bool, std::is_base_of_v<format_adapter, std::remove_reference_t<T>>> {
+    };
+
+    template <typename T>
+    struct uses_format_provider
+        : public std::integral_constant<bool, !uses_format_member<T>::value&&
+        has_format_provider<T>::value> {};
+
+    template <typename T>
+    struct uses_stream_operator
+        : public std::integral_constant<bool, !uses_format_member<T>::value &&
+        !uses_format_provider<T>::value&&
+        has_ostream_operator<T>::value> {
+    };
+
+    template <typename T>
+    struct uses_missing_provider
+        : public std::integral_constant<bool, !uses_format_member<T>::value &&
+        !uses_format_provider<T>::value&&
+        has_format_provider<T>::value> {};
+
+    template <typename T>
+    std::enable_if_t<uses_format_member<T>::value, T>
+        build_format_adapter(T&& item) {
+        return std::forward<T>(item);
     }
-};
 
-template <typename T>
-class stream_operator_format_adapter : public format_adapter {
-    T item;
-
-  public:
-    explicit stream_operator_format_adapter(T &&item)
-        : item(std::forward<T>(item)) {}
-    void format(std::ostream &os, StringRef options) override {
-        os << item;
+    template <typename T>
+    std::enable_if_t<uses_format_member<T>::value, provider_format_adapter<T>>
+        build_format_adapter(T&& item) {
+        return provider_format_adapter<T>(std::forward<T>(item));
     }
-};
 
-template <typename T> class missing_format_adapter;
+    template <typename T>
+    std::enable_if_t<uses_stream_operator<T>::value,
+        stream_operator_format_adapter<T>>
+        build_format_adapter(T&& item) {
+        return stream_operator_format_adapter<T>(std::forward<T>(item));
+    }
 
-template <typename T> struct has_format_provider {
-    using Decayed = std::decay_t<T>;
-    using SignatureFormat = void (*)(const Decayed &, std::ostream &os,
-                                     StringRef);
-
-    template <typename U>
-    static char test(
-        std::enable_if_t<std::is_same_v<SignatureFormat, &U::format>, int *>);
-
-    template <typename U> static double test(...);
-
-    static const bool value = (sizeof(test<Decayed>(nullptr)) == 1);
-};
-
-template <typename T> struct has_ostream_operator {
-    using ConstRef = const std::decay_t<T> &;
-
-    template <typename U>
-    static char test(
-        std::enable_if_t<std::is_same_v<decltype(std::declval<std::ostream &>()
-                                                 << std::declval<U>()),
-                                        std::ostream &>,
-                         int *>);
-
-    template <typename U> static double test(...);
-
-    static const bool value = (sizeof(test<ConstRef>(nullptr)) == 1);
-};
-
-template <typename T>
-struct uses_format_member
-    : public std::integral_constant<
-          bool, std::is_base_of_v<format_adapter, std::remove_reference_t<T>>> {
-};
-
-template <typename T>
-struct uses_format_provider
-    : public std::integral_constant<bool, !uses_format_member<T>::value &&
-                                              has_format_provider<T>::value> {};
-
-template <typename T>
-struct uses_stream_operator
-    : public std::integral_constant<bool, !uses_format_member<T>::value &&
-                                              !uses_format_provider<T>::value &&
-                                              has_ostream_operator<T>::value> {
-};
-
-template <typename T>
-struct uses_missing_provider
-    : public std::integral_constant<bool, !uses_format_member<T>::value &&
-                                              !uses_format_provider<T>::value &&
-                                              has_format_provider<T>::value> {};
-
-template <typename T>
-std::enable_if_t<uses_format_member<T>::value, T>
-build_format_adapter(T &&item) {
-    return std::forward<T>(item);
-}
-
-template <typename T>
-std::enable_if_t<uses_format_member<T>::value, provider_format_adapter<T>>
-build_format_adapter(T &&item) {
-    return provider_format_adapter<T>(std::forward<T>(item));
-}
-
-template <typename T>
-std::enable_if_t<uses_stream_operator<T>::value,
-                 stream_operator_format_adapter<T>>
-build_format_adapter(T &&item) {
-    return stream_operator_format_adapter<T>(std::forward<T>(item));
-}
-
-template <typename T>
-std::enable_if_t<uses_missing_provider<T>::value, missing_format_adapter<T>>
-build_format_adaptor(T &&item) {
-    return missing_format_adapter<T>();
-}
+    template <typename T>
+    std::enable_if_t<uses_missing_provider<T>::value, missing_format_adapter<T>>
+        build_format_adaptor(T&& item) {
+        return missing_format_adapter<T>();
+    }
 } // end namespace detail
 
 //==-----------Formart Variadic Common------------==//
 enum class AlignStyle { Left, Center, Right };
 
 struct FmtAlign {
-    detail::format_adapter &adaptor;
+    detail::format_adapter& adaptor;
     AlignStyle where;
     size_t amount;
     char fill_char;
 
-    FmtAlign(detail::format_adapter &adaptor, AlignStyle where, size_t amount,
-             char fill = ' ')
+    FmtAlign(detail::format_adapter& adaptor, AlignStyle where, size_t amount,
+        char fill = ' ')
         : adaptor(adaptor), where(where), amount(amount), fill_char(fill) {}
 
-    void format(std::ostream &os, StringRef options) {
+    void format(std::ostream& os, StringRef options) {
         if (amount == 0) {
             adaptor.format(os, options);
             return;
@@ -660,8 +665,8 @@ struct FmtAlign {
         }
     }
 
-  protected:
-    void fill(std::ostream &os, uint32_t count) {
+protected:
+    void fill(std::ostream& os, uint32_t count) {
         for (uint32_t i = 0; i < count; ++i)
             os << fill_char;
     }
@@ -669,79 +674,79 @@ struct FmtAlign {
 
 //==-----------Formart Variadic Adaptor------------==//
 template <typename T> class FormatAdapter : public detail::format_adapter {
-  protected:
-    explicit FormatAdapter(T &&item) : item(std::forward<T>(item)) {}
+protected:
+    explicit FormatAdapter(T&& item) : item(std::forward<T>(item)) {}
     T item;
 };
 
 namespace detail {
-template <typename T> class AlignAdapter final : public FormatAdapter<T> {
-    AlignStyle where;
-    size_t amount;
-    char fill_char;
+    template <typename T> class AlignAdapter final : public FormatAdapter<T> {
+        AlignStyle where;
+        size_t amount;
+        char fill_char;
 
-  public:
-    AlignAdapter(T &&item, AlignStyle where, size_t amount, char fill_char)
-        : FormatAdapter<T>(std::forward<T>(item)), where(where), amount(amount),
-          fill_char(fill_char) {}
+    public:
+        AlignAdapter(T&& item, AlignStyle where, size_t amount, char fill_char)
+            : FormatAdapter<T>(std::forward<T>(item)), where(where), amount(amount),
+            fill_char(fill_char) {}
 
-    void format(std::ostream &os, StringRef options) {
-        auto adaptor =
-            detail::build_format_adapter(std::forward<T>(this->item));
-        FmtAlign(adaptor, where, amount, fill_char).format(os, options);
-    }
-};
+        void format(std::ostream& os, StringRef options) {
+            auto adaptor =
+                detail::build_format_adapter(std::forward<T>(this->item));
+            FmtAlign(adaptor, where, amount, fill_char).format(os, options);
+        }
+    };
 
-template <typename T> class PadAdapter final : public FormatAdapter<T> {
-    size_t left;
-    size_t right;
+    template <typename T> class PadAdapter final : public FormatAdapter<T> {
+        size_t left;
+        size_t right;
 
-  public:
-    PadAdapter(T &&item, size_t left, size_t right)
-        : FormatAdapter<T>(std::forward(item)), left(left), right(right) {}
-    void format(std::ostream &os, StringRef options) {
-        auto adaptor =
-            detail::build_format_adapter(std::forward<T>(this->item));
-        auto fill = [&os](int count) {
-            for (size_t i = 0; i < count; ++i)
-                os << ' ';
-        };
-        fill(left);
-        adaptor.format(os, options);
-        fill(right);
-    }
-};
-
-template <typename T> class RepeatAdapter final : public FormatAdapter<T> {
-    size_t count;
-
-  public:
-    RepeatAdapter(T &&item, size_t count)
-        : FormatAdapter<T>(std::forward<T>(item)), count(count) {}
-
-    void format(std::ostream &os, StringRef options) {
-        auto adaptor =
-            detail::build_format_adapter(std::forward<T>(this->item));
-        for (size_t i = 0; i < count; ++i)
+    public:
+        PadAdapter(T&& item, size_t left, size_t right)
+            : FormatAdapter<T>(std::forward(item)), left(left), right(right) {}
+        void format(std::ostream& os, StringRef options) {
+            auto adaptor =
+                detail::build_format_adapter(std::forward<T>(this->item));
+            auto fill = [&os](int count) {
+                for (size_t i = 0; i < count; ++i)
+                    os << ' ';
+            };
+            fill(left);
             adaptor.format(os, options);
-    }
-};
+            fill(right);
+        }
+    };
+
+    template <typename T> class RepeatAdapter final : public FormatAdapter<T> {
+        size_t count;
+
+    public:
+        RepeatAdapter(T&& item, size_t count)
+            : FormatAdapter<T>(std::forward<T>(item)), count(count) {}
+
+        void format(std::ostream& os, StringRef options) {
+            auto adaptor =
+                detail::build_format_adapter(std::forward<T>(this->item));
+            for (size_t i = 0; i < count; ++i)
+                adaptor.format(os, options);
+        }
+    };
 } // end namespace detail
 
 template <typename T>
-detail::AlignAdapter<T> fmt_align(T &&item, AlignStyle where, size_t amount,
-                                  char fill_char = ' ') {
+detail::AlignAdapter<T> fmt_align(T&& item, AlignStyle where, size_t amount,
+    char fill_char = ' ') {
     return detail::AlignAdapter<T>(std::forward<T>(item), where, amount,
-                                   fill_char);
+        fill_char);
 }
 
 template <typename T>
-detail::PadAdapter<T> fmt_pad(T &&item, size_t left, size_t right) {
+detail::PadAdapter<T> fmt_pad(T&& item, size_t left, size_t right) {
     return detail::PadAdapter<T>(std::forward<T>(item), left, right);
 }
 
 template <typename T>
-detail::RepeatAdapter<T> fmt_repeat(T &&item, size_t count) {
+detail::RepeatAdapter<T> fmt_repeat(T&& item, size_t count) {
     return detail::RepeatAdapter<T>(std::forward<T>(item), count);
 }
 
@@ -752,9 +757,9 @@ enum class FloatStyle { Exponent, ExponentUpper, Fixed, Percent };
 enum class HexPrintStyle { Upper, Lower, PrefixUpper, PrefixLower };
 
 template <typename T, std::size_t N>
-int format_to_buffer(T value, char (&buffer)[N]) {
-    char *end = std::end(buffer);
-    char *cur = end;
+int format_to_buffer(T value, char(&buffer)[N]) {
+    char* end = std::end(buffer);
+    char* cur = end;
 
     do {
         *--cur = '0' + char(value % 10);
@@ -763,7 +768,7 @@ int format_to_buffer(T value, char (&buffer)[N]) {
     return end - cur;
 }
 
-void write_with_commas(std::ostream &os, std::string buffer) {
+void write_with_commas(std::ostream& os, std::string buffer) {
     assert(buffer.empty());
     std::string this_group;
     int init_digits = ((buffer.size() - 1) % 3) + 1;
@@ -780,8 +785,8 @@ void write_with_commas(std::ostream &os, std::string buffer) {
 }
 
 template <typename T>
-void write_unsigned_impl(std::ostream &os, T n, size_t min_digits,
-                         IntegerStyle style, bool is_negetive) {
+void write_unsigned_impl(std::ostream& os, T n, size_t min_digits,
+    IntegerStyle style, bool is_negetive) {
     static_assert(std::is_unsigned_v<T>, "value is not unsigned");
 
     char number_buffer[128];
@@ -800,30 +805,32 @@ void write_unsigned_impl(std::ostream &os, T n, size_t min_digits,
 
     if (style == IntegerStyle::Number) {
         write_with_commas(os, std::string(std::end(number_buffer) - len, len));
-    } else {
+    }
+    else {
         os.write(std::end(number_buffer) - len, len);
     }
 }
 
 template <typename T>
-void write_unsigned(std::ostream &os, T n, size_t min_digits,
-                    IntegerStyle style, bool is_negtive = false) {
+void write_unsigned(std::ostream& os, T n, size_t min_digits,
+    IntegerStyle style, bool is_negtive = false) {
     if (n == static_cast<uint32_t>(n))
         write_unsigned_impl(os, static_cast<uint32_t>(n), min_digits, style,
-                            is_negtive);
+            is_negtive);
     else
         write_unsigned_impl(os, n, min_digits, style, is_negtive);
 }
 
 template <typename T>
-void write_signed(std::ostream &os, T n, size_t min_digits,
-                  IntegerStyle style) {
+void write_signed(std::ostream& os, T n, size_t min_digits,
+    IntegerStyle style) {
     static_assert(std::is_signed_v<T>, "value is not signed");
     using UnsignedTy = std::make_unsigned_t<T>;
 
     if (n >= 0) {
         write_unsigned(os, static_cast<UnsignedTy>(n), min_digits, style);
-    } else {
+    }
+    else {
         UnsignedTy u = -(UnsignedTy)n;
         write_unsigned(os, u, min_digits, style, true);
     }
@@ -842,58 +849,58 @@ size_t get_default_precision(FloatStyle style) {
 
 bool is_prefixed_hex_style(HexPrintStyle style) {
     return (style == HexPrintStyle::PrefixLower ||
-            style == HexPrintStyle::PrefixUpper);
+        style == HexPrintStyle::PrefixUpper);
 }
 
-void write_integer(std::ostream &os, unsigned int n, size_t min_digits,
-                   IntegerStyle style) {
+void write_integer(std::ostream& os, unsigned int n, size_t min_digits,
+    IntegerStyle style) {
     write_unsigned(os, n, min_digits, style);
 }
 
-void write_integer(std::ostream &os, int n, size_t min_digits,
-                   IntegerStyle style) {
+void write_integer(std::ostream& os, int n, size_t min_digits,
+    IntegerStyle style) {
     write_signed(os, n, min_digits, style);
 }
 
-void write_integer(std::ostream &os, unsigned long n, size_t min_digits,
-                   IntegerStyle style) {
+void write_integer(std::ostream& os, unsigned long n, size_t min_digits,
+    IntegerStyle style) {
     write_unsigned(os, n, min_digits, style);
 }
 
-void write_integer(std::ostream &os, long n, size_t min_digits,
-                   IntegerStyle style) {
+void write_integer(std::ostream& os, long n, size_t min_digits,
+    IntegerStyle style) {
     write_signed(os, n, min_digits, style);
 }
 
-void write_integer(std::ostream &os, unsigned long long n, size_t min_digits,
-                   IntegerStyle style) {
+void write_integer(std::ostream& os, unsigned long long n, size_t min_digits,
+    IntegerStyle style) {
     write_unsigned(os, n, min_digits, style);
 }
 
-void write_integer(std::ostream &os, long long n, size_t min_digits,
-                   IntegerStyle style) {
+void write_integer(std::ostream& os, long long n, size_t min_digits,
+    IntegerStyle style) {
     write_signed(os, n, min_digits, style);
 }
 
-void write_hex(std::ostream &os, uint64_t n, HexPrintStyle style,
-               std::optional<size_t> width = std::nullopt) {
+void write_hex(std::ostream& os, uint64_t n, HexPrintStyle style,
+    std::optional<size_t> width = std::nullopt) {
     const size_t MAX_WIDTH = 128;
 
     size_t w = std::min(MAX_WIDTH, width.value_or(0U));
     unsigned nibbles = (64 - countLeadingZeros(n) + 3) / 4;
     bool prefix = (style == HexPrintStyle::PrefixLower ||
-                   style == HexPrintStyle::PrefixUpper);
+        style == HexPrintStyle::PrefixUpper);
     bool upper =
         (style == HexPrintStyle::Upper || style == HexPrintStyle::PrefixUpper);
     unsigned prefix_chars = prefix ? 2 : 0;
     unsigned num_chars = std::max(static_cast<unsigned>(w),
-                                  std::max(1U, nibbles) + prefix_chars);
+        std::max(1U, nibbles) + prefix_chars);
     char number_buffer[MAX_WIDTH];
     std::memset(number_buffer, '0', sizeof(number_buffer));
     if (prefix)
         number_buffer[1] = 'x';
-    char *end = number_buffer + num_chars;
-    char *cur = end;
+    char* end = number_buffer + num_chars;
+    char* cur = end;
     while (n) {
         unsigned char x = static_cast<unsigned char>(n) % 16;
         *--cur = hexdigit(x, !upper);
@@ -902,13 +909,14 @@ void write_hex(std::ostream &os, uint64_t n, HexPrintStyle style,
     os.write(number_buffer, num_chars);
 }
 
-void write_double(std::ostream &os, double d, FloatStyle style,
-                  std::optional<size_t> precision = std::nullopt) {
+void write_double(std::ostream& os, double d, FloatStyle style,
+    std::optional<size_t> precision = std::nullopt) {
     size_t prec = precision.value_or(get_default_precision(style));
 
     if (std::isnan(d)) {
         os << "nan";
-    } else if (std::isinf(d)) {
+    }
+    else if (std::isinf(d)) {
         os << "INF";
         return;
     }
@@ -926,9 +934,9 @@ void write_double(std::ostream &os, double d, FloatStyle style,
     std::string spec = out.str();
     if (style == FloatStyle::Exponent || style == FloatStyle::ExponentUpper) {
 #ifdef _WIN32
-// On MSVCRT and compatible, output of %e is incompatible to Posix
-// by default. Number of exponent digits should be at least 2. "%+03d"
-// FIXME: Implement our formatter to here or Support/Format.h!
+        // On MSVCRT and compatible, output of %e is incompatible to Posix
+        // by default. Number of exponent digits should be at least 2. "%+03d"
+        // FIXME: Implement our formatter to here or Support/Format.h!
 #if defined(__MINGW32__)
         // FIXME: It should be generic to C++11.
         if (d == 0.0 && std::signbit(d)) {
@@ -943,7 +951,7 @@ void write_double(std::ostream &os, double d, FloatStyle style,
         // negative zero
         if (fpcl == _FPCLASS_NZ) {
             char NegativeZero[] = "-0.000000e+00";
-            if (Style == FloatStyle::ExponentUpper)
+            if (style == FloatStyle::ExponentUpper)
                 NegativeZero[strlen(NegativeZero) - 4] = 'E';
             os << NegativeZero;
             return;
@@ -986,78 +994,79 @@ void write_double(std::ostream &os, double d, FloatStyle style,
 }
 
 namespace detail {
-template <typename T>
-struct use_integral_formatter
-    : public std::integral_constant<
-          bool, is_one_of<T, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
-                          int64_t, uint64_t, int, unsigned, long, unsigned long,
-                          long long, unsigned long long>::value> {};
+    template <typename T>
+    struct use_integral_formatter
+        : public std::integral_constant<
+        bool, is_one_of<T, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
+        int64_t, uint64_t, int, unsigned, long, unsigned long,
+        long long, unsigned long long>::value> {};
 
-template <typename T>
-struct use_char_formatter
-    : public std::integral_constant<bool, std::is_same<T, char>::value> {};
+    template <typename T>
+    struct use_char_formatter
+        : public std::integral_constant<bool, std::is_same<T, char>::value> {};
 
-template <typename T>
-struct is_cstring
-    : public std::integral_constant<bool,
-                                    is_one_of<T, char *, const char *>::value> {
-};
+    template <typename T>
+    struct is_cstring
+        : public std::integral_constant<bool,
+        is_one_of<T, char*, const char*>::value> {
+    };
 
-template <typename T>
-struct use_string_formatter
-    : public std::integral_constant<bool,
-                                    std::is_convertible<T, StringRef>::value> {
-};
+    template <typename T>
+    struct use_string_formatter
+        : public std::integral_constant<bool,
+        std::is_convertible<T, StringRef>::value> {
+    };
 
-template <typename T>
-struct use_pointer_formatter
-    : public std::integral_constant<bool, std::is_pointer<T>::value &&
-                                              !is_cstring<T>::value> {};
+    template <typename T>
+    struct use_pointer_formatter
+        : public std::integral_constant<bool, std::is_pointer<T>::value &&
+        !is_cstring<T>::value> {};
 
-template <typename T>
-struct use_double_formatter
-    : public std::integral_constant<bool, std::is_floating_point<T>::value> {};
+    template <typename T>
+    struct use_double_formatter
+        : public std::integral_constant<bool, std::is_floating_point<T>::value> {};
 
-class HelperFunctions {
-  protected:
-    static std::optional<size_t> parse_numeric_precision(StringRef Str) {
-        size_t Prec;
-        std::optional<size_t> Result;
-        if (Str.empty())
-            Result = std::nullopt;
-        else if (Str.getAsInteger(10, Prec)) {
-            assert(false && "Invalid precision specifier");
-            Result = std::nullopt;
-        } else {
-            assert(Prec < 100 && "Precision out of range");
-            Result = std::min<size_t>(99u, Prec);
+    class HelperFunctions {
+    protected:
+        static std::optional<size_t> parse_numeric_precision(StringRef Str) {
+            size_t Prec;
+            std::optional<size_t> Result;
+            if (Str.empty())
+                Result = std::nullopt;
+            else if (Str.getAsInteger(10, Prec)) {
+                assert(false && "Invalid precision specifier");
+                Result = std::nullopt;
+            }
+            else {
+                assert(Prec < 100 && "Precision out of range");
+                Result = std::min<size_t>(99u, Prec);
+            }
+            return Result;
         }
-        return Result;
-    }
 
-    static bool consume_hex_style(StringRef &Str, HexPrintStyle &Style) {
-        if (!Str.startswith_lower("x"))
-            return false;
+        static bool consume_hex_style(StringRef& Str, HexPrintStyle& Style) {
+            if (!Str.startswith_lower("x"))
+                return false;
 
-        if (Str.consume_front("x-"))
-            Style = HexPrintStyle::Lower;
-        else if (Str.consume_front("X-"))
-            Style = HexPrintStyle::Upper;
-        else if (Str.consume_front("x+") || Str.consume_front("x"))
-            Style = HexPrintStyle::PrefixLower;
-        else if (Str.consume_front("X+") || Str.consume_front("X"))
-            Style = HexPrintStyle::PrefixUpper;
-        return true;
-    }
+            if (Str.consume_front("x-"))
+                Style = HexPrintStyle::Lower;
+            else if (Str.consume_front("X-"))
+                Style = HexPrintStyle::Upper;
+            else if (Str.consume_front("x+") || Str.consume_front("x"))
+                Style = HexPrintStyle::PrefixLower;
+            else if (Str.consume_front("X+") || Str.consume_front("X"))
+                Style = HexPrintStyle::PrefixUpper;
+            return true;
+        }
 
-    static size_t consume_num_hex_digits(StringRef &Str, HexPrintStyle Style,
-                                         size_t Default) {
-        Str.consumeInteger(10, Default);
-        if (is_prefixed_hex_style(Style))
-            Default += 2;
-        return Default;
-    }
-};
+        static size_t consume_num_hex_digits(StringRef& Str, HexPrintStyle Style,
+            size_t Default) {
+            Str.consumeInteger(10, Default);
+            if (is_prefixed_hex_style(Style))
+                Default += 2;
+            return Default;
+        }
+    };
 } // end namespace detail
 
 /// Implementation of format_provider<T> for integral arithmetic types.
@@ -1087,9 +1096,9 @@ template <typename T>
 struct format_provider<
     T, typename std::enable_if<detail::use_integral_formatter<T>::value>::type>
     : public detail::HelperFunctions {
-  private:
-  public:
-    static void format(const T &V, std::ostream &Stream, StringRef Style) {
+private:
+public:
+    static void format(const T& V, std::ostream& Stream, StringRef Style) {
         HexPrintStyle HS;
         size_t Digits = 0;
         if (consume_hex_style(Style, HS)) {
@@ -1136,12 +1145,12 @@ template <typename T>
 struct format_provider<
     T, typename std::enable_if<detail::use_pointer_formatter<T>::value>::type>
     : public detail::HelperFunctions {
-  private:
-  public:
-    static void format(const T &V, std::ostream &Stream, StringRef Style) {
+private:
+public:
+    static void format(const T& V, std::ostream& Stream, StringRef Style) {
         HexPrintStyle HS = HexPrintStyle::PrefixUpper;
         consume_hex_style(Style, HS);
-        size_t Digits = consume_num_hex_digits(Style, HS, sizeof(void *) * 2);
+        size_t Digits = consume_num_hex_digits(Style, HS, sizeof(void*) * 2);
         write_hex(Stream, reinterpret_cast<std::uintptr_t>(V), HS, Digits);
     }
 };
@@ -1160,7 +1169,7 @@ struct format_provider<
 template <typename T>
 struct format_provider<
     T, typename std::enable_if<detail::use_string_formatter<T>::value>::type> {
-    static void format(const T &V, std::ostream &Stream, StringRef Style) {
+    static void format(const T& V, std::ostream& Stream, StringRef Style) {
         size_t N = StringRef::npos;
         if (!Style.empty() && Style.getAsInteger(10, N)) {
             assert(false && "Style is not a valid integer");
@@ -1182,7 +1191,7 @@ struct format_provider<
 template <typename T>
 struct format_provider<
     T, typename std::enable_if<detail::use_char_formatter<T>::value>::type> {
-    static void format(const char &V, std::ostream &Stream, StringRef Style) {
+    static void format(const char& V, std::ostream& Stream, StringRef Style) {
         if (Style.empty())
             Stream << V;
         else {
@@ -1209,18 +1218,23 @@ struct format_provider<
 ///   | (empty) |   Equivalent to 't'  |
 ///   ==================================
 template <> struct format_provider<bool> {
-    static void format(const bool &B, std::ostream &Stream, StringRef Style) {
+    static void format(const bool& B, std::ostream& Stream, StringRef Style) {
         if (Style.starts_with("Y")) {
             Stream << (B ? "YES" : "NO");
-        } else if (Style.starts_with("y")) {
+        }
+        else if (Style.starts_with("y")) {
             Stream << (B ? "yes" : "no");
-        } else if (Style.starts_with("D")) {
+        }
+        else if (Style.starts_with("D")) {
             Stream << (B ? "1" : "0");
-        } else if (Style.starts_with("T")) {
+        }
+        else if (Style.starts_with("T")) {
             Stream << (B ? "TRUE" : "FALSE");
-        } else if (Style.starts_with("t")) {
+        }
+        else if (Style.starts_with("t")) {
             Stream << (B ? "true" : "false");
-        } else {
+        }
+        else {
             Stream << (B ? "1" : "0");
         }
     }
@@ -1253,7 +1267,7 @@ template <typename T>
 struct format_provider<
     T, typename std::enable_if<detail::use_double_formatter<T>::value>::type>
     : public detail::HelperFunctions {
-    static void format(const T &V, std::ostream &Stream, StringRef Style) {
+    static void format(const T& V, std::ostream& Stream, StringRef Style) {
         FloatStyle S;
         if (Style.consume_front("P") || Style.consume_front("p"))
             S = FloatStyle::Percent;
@@ -1281,9 +1295,9 @@ struct ReplacementItem {
     explicit ReplacementItem(StringRef Literal)
         : Type(ReplacementType::Literal), Spec(Literal) {}
     ReplacementItem(StringRef Spec, size_t Index, size_t Align,
-                    AlignStyle Where, char Pad, StringRef Options)
+        AlignStyle Where, char Pad, StringRef Options)
         : Type(ReplacementType::Format), Spec(Spec), Index(Index), Align(Align),
-          Where(Where), Pad(Pad), Options(Options) {}
+        Where(Where), Pad(Pad), Options(Options) {}
 
     ReplacementType Type = ReplacementType::Empty;
     StringRef Spec;
@@ -1295,10 +1309,10 @@ struct ReplacementItem {
 };
 
 class formatv_object_base;
-std::ostream &operator<<(std::ostream &, const formatv_object_base &);
+std::ostream& operator<<(std::ostream&, const formatv_object_base&);
 
 class formatv_object_base {
-  protected:
+protected:
     // The parameters are stored in a std::tuple, which does not provide runtime
     // indexing capabilities.  In order to enable runtime indexing, we use this
     // structure to put the parameters into a std::vector.  Since the parameters
@@ -1308,17 +1322,17 @@ class formatv_object_base {
     // to a std::vector<Base*>.
     struct create_adapters {
         template <typename... Ts>
-        std::vector<detail::format_adapter *> operator()(Ts &...Items) {
-            return std::vector<detail::format_adapter *>{&Items...};
+        std::vector<detail::format_adapter*> operator()(Ts &...Items) {
+            return std::vector<detail::format_adapter*>{&Items...};
         }
     };
 
     StringRef Fmt;
-    std::vector<detail::format_adapter *> Adapters;
+    std::vector<detail::format_adapter*> Adapters;
     std::vector<ReplacementItem> Replacements;
 
-    static bool consumeFieldLayout(StringRef &Spec, AlignStyle &Where,
-                                   size_t &Align, char &Pad) {
+    static bool consumeFieldLayout(StringRef& Spec, AlignStyle& Where,
+        size_t& Align, char& Pad) {
         Where = AlignStyle::Right;
         Align = 0;
         Pad = ' ';
@@ -1335,7 +1349,8 @@ class formatv_object_base {
                 Pad = Spec[0];
                 Where = *Loc;
                 Spec = Spec.drop_front(2);
-            } else if (auto Loc = translateLocChar(Spec[0])) {
+            }
+            else if (auto Loc = translateLocChar(Spec[0])) {
                 Where = *Loc;
                 Spec = Spec.drop_front(1);
             }
@@ -1346,14 +1361,14 @@ class formatv_object_base {
     }
 
     static std::pair<ReplacementItem, StringRef>
-    splitLiteralAndReplacement(StringRef Fmt) {
+        splitLiteralAndReplacement(StringRef Fmt) {
         std::size_t From = 0;
         while (From < Fmt.size() && From != StringRef::npos) {
             std::size_t BO = Fmt.find_first_of('{', From);
             // Everything up until the first brace is a literal.
             if (BO != 0)
-                return std::make_pair(ReplacementItem{Fmt.substr(0, BO)},
-                                      Fmt.substr(BO));
+                return std::make_pair(ReplacementItem{ Fmt.substr(0, BO) },
+                    Fmt.substr(BO));
 
             StringRef Braces =
                 Fmt.drop_front(BO).take_while([](char C) { return C == '{'; });
@@ -1363,7 +1378,7 @@ class formatv_object_base {
                 size_t NumEscapedBraces = Braces.size() / 2;
                 StringRef Middle = Fmt.substr(BO, NumEscapedBraces);
                 StringRef Right = Fmt.drop_front(BO + NumEscapedBraces * 2);
-                return std::make_pair(ReplacementItem{Middle}, Right);
+                return std::make_pair(ReplacementItem{ Middle }, Right);
             }
             // An unterminated open brace is undefined.  We treat the rest of
             // the string as a literal replacement, but we assert to indicate
@@ -1371,8 +1386,8 @@ class formatv_object_base {
             std::size_t BC = Fmt.find_first_of('}', BO);
             if (BC == StringRef::npos) {
                 assert(false && "Unterminated brace sequence.  Escape with {{ "
-                                "for a literal brace.");
-                return std::make_pair(ReplacementItem{Fmt}, StringRef());
+                    "for a literal brace.");
+                return std::make_pair(ReplacementItem{ Fmt }, StringRef());
             }
 
             // Even if there is a closing brace, if there is another open brace
@@ -1380,8 +1395,8 @@ class formatv_object_base {
             // again with the next one.
             std::size_t BO2 = Fmt.find_first_of('{', BO + 1);
             if (BO2 < BC)
-                return std::make_pair(ReplacementItem{Fmt.substr(0, BO2)},
-                                      Fmt.substr(BO2));
+                return std::make_pair(ReplacementItem{ Fmt.substr(0, BO2) },
+                    Fmt.substr(BO2));
 
             StringRef Spec = Fmt.slice(BO + 1, BC);
             StringRef Right = Fmt.substr(BC + 1);
@@ -1394,26 +1409,26 @@ class formatv_object_base {
             // an invalid replacement spec, and just continue.
             From = BC + 1;
         }
-        return std::make_pair(ReplacementItem{Fmt}, StringRef());
+        return std::make_pair(ReplacementItem{ Fmt }, StringRef());
     }
 
-  public:
+public:
     formatv_object_base(StringRef Fmt, std::size_t ParamCount)
         : Fmt(Fmt), Replacements(parseFormatString(Fmt)) {
         Adapters.reserve(ParamCount);
     }
 
-    formatv_object_base(formatv_object_base const &rhs) = delete;
+    formatv_object_base(formatv_object_base const& rhs) = delete;
 
-    formatv_object_base(formatv_object_base &&rhs)
+    formatv_object_base(formatv_object_base&& rhs)
         : Fmt(std::move(rhs.Fmt)),
-          Adapters(), // Adapters are initialized by formatv_object
-          Replacements(std::move(rhs.Replacements)) {
+        Adapters(), // Adapters are initialized by formatv_object
+        Replacements(std::move(rhs.Replacements)) {
         Adapters.reserve(rhs.Adapters.size());
     };
 
-    void format(std::ostream &S) const {
-        for (auto &R : Replacements) {
+    void format(std::ostream& S) const {
+        for (auto& R : Replacements) {
             if (R.Type == ReplacementType::Empty)
                 continue;
             if (R.Type == ReplacementType::Literal) {
@@ -1476,7 +1491,7 @@ class formatv_object_base {
             RepString = RepString.drop_front();
             if (!consumeFieldLayout(RepString, Where, Align, Pad))
                 assert(false &&
-                       "Invalid replacement field layout specification!");
+                    "Invalid replacement field layout specification!");
         }
         RepString = RepString.trim();
         if (!RepString.empty() && RepString.front() == ':') {
@@ -1486,10 +1501,10 @@ class formatv_object_base {
         RepString = RepString.trim();
         if (!RepString.empty()) {
             assert(false &&
-                   "Unexpected characters found in replacement string!");
+                "Unexpected characters found in replacement string!");
         }
 
-        return ReplacementItem{Spec, Index, Align, Where, Pad, Options};
+        return ReplacementItem{ Spec, Index, Align, Where, Pad, Options };
     }
 
     std::string str() const {
@@ -1505,7 +1520,7 @@ class formatv_object_base {
     }
 };
 
-std::ostream &operator<<(std::ostream &os, const formatv_object_base &base) {
+std::ostream& operator<<(std::ostream& os, const formatv_object_base& base) {
     base.format(os);
     return os;
 }
@@ -1517,18 +1532,18 @@ template <typename Tuple> class formatv_object : public formatv_object_base {
     // tuple.
     Tuple Parameters;
 
-  public:
-    formatv_object(StringRef Fmt, Tuple &&Params)
+public:
+    formatv_object(StringRef Fmt, Tuple&& Params)
         : formatv_object_base(Fmt, std::tuple_size<Tuple>::value),
-          Parameters(std::move(Params)) {
+        Parameters(std::move(Params)) {
         Adapters = apply_tuple(create_adapters(), Parameters);
     }
 
-    formatv_object(formatv_object const &rhs) = delete;
+    formatv_object(formatv_object const& rhs) = delete;
 
-    formatv_object(formatv_object &&rhs)
+    formatv_object(formatv_object&& rhs)
         : formatv_object_base(std::move(rhs)),
-          Parameters(std::move(rhs.Parameters)) {
+        Parameters(std::move(rhs.Parameters)) {
         Adapters = apply_tuple(create_adapters(), Parameters);
     }
 };
@@ -1616,17 +1631,17 @@ template <typename Tuple> class formatv_object : public formatv_object_base {
 // the details of what that is are undefined.
 //
 template <typename... Ts>
-inline auto formatv(const char *Fmt, Ts &&...Vals)
-    -> formatv_object<decltype(std::make_tuple(
-        detail::build_format_adapter(std::forward<Ts>(Vals))...))> {
+inline auto formatv(const char* Fmt, Ts &&...Vals)
+-> formatv_object<decltype(std::make_tuple(
+    detail::build_format_adapter(std::forward<Ts>(Vals))...))> {
     using ParamTuple = decltype(std::make_tuple(
         detail::build_format_adapter(std::forward<Ts>(Vals))...));
     return formatv_object<ParamTuple>(
         Fmt, std::make_tuple(
-                 detail::build_format_adapter(std::forward<Ts>(Vals))...));
+            detail::build_format_adapter(std::forward<Ts>(Vals))...));
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::cout << formatv("Hello {1}, Pi = {0}!", 3.14, "Word") << std::endl;
     return 0;
 }
